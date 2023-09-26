@@ -6,10 +6,14 @@ const {validateRegister,
     validateToken} = require('../middleware/validations')
 const {register,
     login,
-    getMonsters} = require('../controllers/mainControllers')
+    getMonsters,
+    generateItems,
+    sendPlayerInfo} = require('../controllers/mainControllers')
 
 router.get('/start', getMonsters)
 router.post('/register', validateRegister, register);
-router.post('/login', validateLogin, login)
+router.post('/login', validateLogin, login);
+router.get('/generateItems', generateItems);
+router.get('/getPlayerInfo', validateToken, sendPlayerInfo);
 
 module.exports = router;

@@ -3,6 +3,8 @@ const resSend = (res, error, data, message) => {
 }
 const playersDb = require('../schemas/playerSchema');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
 module.exports = {
     validateRegister: async (req,res,next) => {
         console.log(req.body);
@@ -27,6 +29,14 @@ module.exports = {
         next()
     },
     validateToken: (req,res,next) => {
+        const token = req.headers.authorization;
+        jwt.verify(token, process.env.JWT_SECRET, async (err, data) => {
+            if(err) {
+                console.log('verification error in middleware', err);
+                return resSend(res, true, null, 'User verification failed');
+            }
+            req.player = data
+        })
         next();
     }
 }

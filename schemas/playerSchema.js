@@ -23,6 +23,16 @@ const playerSchema = new Schema ({
         type: Array,
         required: true,
         default: []
+    },
+    equip: {
+        type: Array,
+        required: true,
+        default: []
+    },
+    hp: {
+        type: Number,
+        required: true,
+        default: 100
     }
 })
 

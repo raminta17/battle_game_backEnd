@@ -1,7 +1,7 @@
 const resSend = (res, error, data, message) => {
     res.send({error, data, message})
 }
-const {sendMonsters} = require('../modules/playersModule');
+const {sendMonsters, generateRandomWeapon, generateRandomArmour} = require('../modules/playersModule');
 const playersDb = require('../schemas/playerSchema');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -42,5 +42,16 @@ module.exports = {
 
 
         resSend(res, false, {token, findPlayer}, 'login success');
+    },
+    sendPlayerInfo: async (req,res) => {
+        const player = await playersDb.findOne({_id: req.player.id}, {password:0});
+        resSend(res, false, player, 'user info send');
+    },
+    generateItems: (req,res) => {
+        const randomWeapon = generateRandomWeapon();
+        const randomArmour = generateRandomArmour();
+        console.log('randomWeapon',randomWeapon);
+        console.log('randomArmour',randomArmour);
+        resSend(res, false, null, 'generating items');
     }
 }
