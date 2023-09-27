@@ -1,7 +1,7 @@
 const resSend = (res, error, data, message) => {
     res.send({error, data, message})
 }
-const {sendMonsters, generateRandomWeapon, generateRandomArmour} = require('../modules/playersModule');
+const {sendMonsters, generateRandomWeapon, generateRandomArmour, generatePotion} = require('../modules/playersModule');
 const playersDb = require('../schemas/playerSchema');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -47,11 +47,99 @@ module.exports = {
         const player = await playersDb.findOne({_id: req.player.id}, {password:0});
         resSend(res, false, player, 'user info send');
     },
-    generateItems: (req,res) => {
+    generateItems: async (req,res) => {
+        const player = req.player;
+        const findPlayer = await playersDb.findOne({_id: player.id} );
+        if(findPlayer.money < 100) return resSend(res, true, null, 'You don\'t have enough money.');
+        const updatePlayer = await playersDb.findOneAndUpdate(
+            {_id: player.id},
+            {$inc: {money: -100}},
+            {new:true}
+        )
+        const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
         const randomWeapon = generateRandomWeapon();
         const randomArmour = generateRandomArmour();
-        console.log('randomWeapon',randomWeapon);
-        console.log('randomArmour',randomArmour);
-        resSend(res, false, null, 'generating items');
+        const randomPotion = generatePotion();
+        resSend(res, false, {randomWeapon,randomArmour,randomPotion, playerToFrontEnd}, 'generating items');
+    },
+    takeItem: async (req,res) => {
+        const player = req.player;
+        const updatePlayer = await playersDb.findOneAndUpdate(
+            {_id: player.id},
+            {$push: {inventory: req.body}},
+            {new:true}
+        )
+        const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
+        resSend(res, false, playerToFrontEnd, 'item added to inventory');
+    },
+    equipItem: async (req,res) => {
+        const player = req.player;
+        if(req.body.name === 'Weapon') {
+            const updatePlayer = await playersDb.findOneAndUpdate(
+                {_id: player.id},
+                {$set: {equippedWeapon: req.body}},
+                {new:true}
+            )
+            const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
+             return resSend(res, false, playerToFrontEnd, 'item equipped');
+        }
+        if(req.body.name === 'Armour') {
+            const updatePlayer = await playersDb.findOneAndUpdate(
+                {_id: player.id},
+                {$set: {equippedArmour: req.body}},
+                {new:true}
+            )
+            const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
+            return resSend(res, false, playerToFrontEnd, 'item equipped');
+        }
+        if(req.body.name === 'Potion') {
+            const updatePlayer = await playersDb.findOneAndUpdate(
+                {_id: player.id},
+                {$set: {equippedPotion: req.body}},
+                {new:true}
+            )
+            const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
+            return resSend(res, false, playerToFrontEnd, 'item equipped');
+        }
+    },
+    removeItem: async (req,res) => {
+        const player = req.player;
+        const findPlayer = await playersDb.findOne({_id: player.id});
+        console.log(req.body.id === findPlayer.equippedWeapon.id);
+        if(req.body.id === findPlayer.equippedWeapon.id) {
+            console.log('i am inside equal weapon if');
+            const removeEquippedWeapon = await playersDb.findOneAndUpdate(
+                {_id: player.id},
+                {$set: {equippedWeapon: {}}, $pull: {inventory: {id:req.body.id}}},
+                {new:true}
+            )
+            const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
+            return resSend(res, false, playerToFrontEnd, 'item removed');
+        }
+        if(req.body.id === findPlayer.equippedArmour.id) {
+            const removeEquippedArmour = await playersDb.findOneAndUpdate(
+                {_id: player.id},
+                {$set: {equippedArmour: {}}, $pull: {inventory: {id:req.body.id}}},
+                {new:true}
+            )
+            const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
+            return resSend(res, false, playerToFrontEnd, 'item removed');
+        }
+        if(req.body.id === findPlayer.equippedPotion.id) {
+            const removeEquippedPotion = await playersDb.findOneAndUpdate(
+                {_id: player.id},
+                {$set: {equippedPotion: {}}, $pull: {inventory: {id:req.body.id}}},
+                {new:true}
+            )
+            const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
+            return resSend(res, false, playerToFrontEnd, 'item removed');
+        }
+        const updatePlayer = await playersDb.findOneAndUpdate(
+            {_id: player.id},
+            {$pull: {inventory: {id:req.body.id}}},
+            {new:true}
+        )
+        const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
+        resSend(res, false, playerToFrontEnd, 'item removed');
     }
 }

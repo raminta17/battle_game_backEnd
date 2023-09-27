@@ -24,10 +24,20 @@ const playerSchema = new Schema ({
         required: true,
         default: []
     },
-    equip: {
-        type: Array,
+    equippedWeapon: {
+        type: Object,
         required: true,
-        default: []
+        default: {}
+    },
+    equippedArmour: {
+        type: Object,
+        required: false,
+        default: {}
+    },
+    equippedPotion: {
+        type: Object,
+        required: false,
+        default: {}
     },
     hp: {
         type: Number,
