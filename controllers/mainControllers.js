@@ -32,11 +32,11 @@ module.exports = {
     login: async (req,res) => {
         const {username} = req.body;
         const findPlayer = await playersDb.findOne({username}, {password:0});
-        console.log('findPlayer without password', findPlayer);
 
             const player= {
                 id: findPlayer._id,
-                username
+                username,
+                monster: findPlayer.monster
             }
             const token = jwt.sign(player,process.env.JWT_SECRET);
 
@@ -105,9 +105,7 @@ module.exports = {
     removeItem: async (req,res) => {
         const player = req.player;
         const findPlayer = await playersDb.findOne({_id: player.id});
-        console.log(req.body.id === findPlayer.equippedWeapon.id);
         if(req.body.id === findPlayer.equippedWeapon.id) {
-            console.log('i am inside equal weapon if');
             const removeEquippedWeapon = await playersDb.findOneAndUpdate(
                 {_id: player.id},
                 {$set: {equippedWeapon: {}}, $pull: {inventory: {id:req.body.id}}},

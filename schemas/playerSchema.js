@@ -22,12 +22,30 @@ const playerSchema = new Schema ({
     inventory: {
         type: Array,
         required: true,
-        default: []
+        default: [{
+            id: 1,
+            name: 'Weapon',
+            image: 'https://png.pngtree.com/png-clipart/20230805/original/pngtree-fist-hand-cartoon-smiley-success-graphic-vector-picture-image_9846520.png',
+            level: 'C',
+            color: 'limegreen',
+            damage: 1,
+            gold: 1,
+            effects: []
+        }]
     },
     equippedWeapon: {
         type: Object,
         required: true,
-        default: {}
+        default: {
+            id: 1,
+            name: 'Weapon',
+            image: 'https://png.pngtree.com/png-clipart/20230805/original/pngtree-fist-hand-cartoon-smiley-success-graphic-vector-picture-image_9846520.png',
+            level: 'C',
+            color: 'limegreen',
+            damage: 1,
+            gold: 1,
+            effects: []
+        }
     },
     equippedArmour: {
         type: Object,
