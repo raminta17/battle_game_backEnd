@@ -17,7 +17,12 @@ const playerSchema = new Schema ({
     money: {
         type: Number,
         required: true,
-        default: 100
+        default: 1000
+    },
+    generatedItems: {
+        type: Array,
+        required: false,
+        default: []
     },
     inventory: {
         type: Array,

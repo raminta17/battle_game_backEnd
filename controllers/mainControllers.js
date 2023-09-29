@@ -51,22 +51,24 @@ module.exports = {
         const player = req.player;
         const findPlayer = await playersDb.findOne({_id: player.id} );
         if(findPlayer.money < 100) return resSend(res, true, null, 'You don\'t have enough money.');
-        const updatePlayer = await playersDb.findOneAndUpdate(
-            {_id: player.id},
-            {$inc: {money: -100}},
-            {new:true}
-        )
-        const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
         const randomWeapon = generateRandomWeapon();
         const randomArmour = generateRandomArmour();
         const randomPotion = generatePotion();
-        resSend(res, false, {randomWeapon,randomArmour,randomPotion, playerToFrontEnd}, 'generating items');
+
+        const updatePlayer = await playersDb.findOneAndUpdate(
+            {_id: player.id},
+            {$inc: {money: -100}, $set: {generatedItems: [{...randomWeapon}, {...randomArmour}, {...randomPotion}]}},
+            {new:true}
+        )
+        const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
+
+        resSend(res, false, playerToFrontEnd, 'generating items');
     },
     takeItem: async (req,res) => {
         const player = req.player;
         const updatePlayer = await playersDb.findOneAndUpdate(
             {_id: player.id},
-            {$push: {inventory: req.body}},
+            {$push: {inventory: req.body}, $pull: {generatedItems: {id:req.body.id}}},
             {new:true}
         )
         const playerToFrontEnd = await playersDb.findOne({_id: player.id}, {password:0});
