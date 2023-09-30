@@ -31,7 +31,7 @@ const effects = [
         chance: 50
     },
     {
-        effect: 'Double Dodge',
+        effect: 'Dodge Chance',
         chance: 40
     },
     {

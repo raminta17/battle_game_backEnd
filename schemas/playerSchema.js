@@ -61,11 +61,6 @@ const playerSchema = new Schema ({
         type: Object,
         required: false,
         default: {}
-    },
-    hp: {
-        type: Number,
-        required: true,
-        default: 100
     }
 })
 
