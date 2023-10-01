@@ -35,7 +35,7 @@ const effects = [
         chance: 40
     },
     {
-        effect: 'Steal hit points',
+        effect: 'Steal hp points',
         chance: 50
     }]
 const items = {
