@@ -61,6 +61,16 @@ const playerSchema = new Schema ({
         type: Object,
         required: false,
         default: {}
+    },
+    victories: {
+        type: Number,
+        required: false,
+        default: 0
+    },
+    losses: {
+        type: Number,
+        required: false,
+        default: 0
     }
 })
 

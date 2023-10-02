@@ -130,6 +130,7 @@ module.exports = {
         const gold = randomNum(randomWeapon.gold+1);
         const effectSlots = randomNum(randomWeapon.slots+1);
         let weaponEffects = [];
+        let remainingEffects = effects;
         if(effectSlots === effects.length) {
             for (let i = 0; i < effects.length; i++) {
                 const randomChance = randomNum(2);
@@ -138,8 +139,11 @@ module.exports = {
         }else {
             for (let i = 0; i < effectSlots; i++) {
                 const randomChance = randomNum(2);
-                const randomEffect = randomNum(effects.length);
-                if(randomChance===1) weaponEffects.push({effect: effects[randomEffect].effect, chance: randomNum(effects[randomEffect].chance)+1})
+                const randomEffect = randomNum(remainingEffects.length);
+                if(randomChance===1) {
+                    weaponEffects.push({effect: remainingEffects[randomEffect].effect, chance: randomNum(remainingEffects[randomEffect].chance)+1});
+                    remainingEffects = remainingEffects.filter(remainingEffect => remainingEffect.effect !== remainingEffects[randomEffect].effect);
+                }
             }
         }
         const weapon = {
@@ -162,6 +166,7 @@ module.exports = {
         const dodge = randomNum(randomArmour.dodge[1]-randomArmour.dodge[0]) + randomArmour.dodge[0];
         const effectSlots = randomNum(randomArmour.slots+1);
         let armourEffects = [];
+        let remainingEffects = effects;
         if(effectSlots === effects.length) {
             for (let i = 0; i < effects.length; i++) {
                 const randomChance = randomNum(2);
@@ -170,8 +175,12 @@ module.exports = {
         }else {
             for (let i = 0; i < effectSlots; i++) {
                 const randomChance = randomNum(2);
-                const randomEffect = randomNum(effects.length);
-                if(randomChance===1) armourEffects.push({effect: effects[randomEffect].effect, chance: randomNum(effects[randomEffect].chance)+1})
+                const randomEffect = randomNum(remainingEffects.length);
+                if(randomChance===1) {
+                    armourEffects.push({effect: remainingEffects[randomEffect].effect, chance: randomNum(remainingEffects[randomEffect].chance)+1});
+                    remainingEffects = remainingEffects.filter(remainingEffect => remainingEffect.effect !== remainingEffects[randomEffect].effect);
+
+                }
             }
         }
         const armour = {

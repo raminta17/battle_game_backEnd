@@ -20,23 +20,37 @@ module.exports = (server) => {
         const token = socket.handshake.auth.token;
         try {
             const data = await jwt.verify(token, process.env.JWT_SECRET);
-            if (!players.some(player => player.username === data.username)) {
+            let existingPlayer = players.find(player => player.username === data.username);
+            if(existingPlayer) {
+                io.to(existingPlayer.socketId).emit('logout', 'you need to log out');
+                existingPlayer.isOnline = true;
+                existingPlayer.socketId = socket.id;
+                existingPlayer.roomsJoined.map(roomJoined => socket.join(roomJoined));
+            } else {
                 players.push({
                     socketId: socket.id,
                     username: data.username,
                     monster: data.monster,
                     inBattle: false,
+                    isOnline: true,
                     sentInvitations: [],
-                    receivedInvitations: []
+                    receivedInvitations: [],
+                    roomsJoined: []
                 })
             }
             io.emit('sendingAllUsers', players);
         } catch (err) {
             console.log('verification error in sockets', err);
         }
+
+
         socket.on("disconnect", () => {
             console.log('user disconnected');
-            players = players.filter(player => player.socketId !== socket.id);
+            let disconnectedPlayer = players.find(player => player.socketId === socket.id);
+            if(disconnectedPlayer) {
+                disconnectedPlayer.isOnline = false;
+                disconnectedPlayer.roomsJoined.map(roomJoined => socket.leave(roomJoined));
+            }
             io.emit('sendingAllUsers', players)
         });
         socket.on('sendInvitation', invitedPlayerSocketId => {
@@ -44,29 +58,31 @@ module.exports = (server) => {
             const invitedPlayer = players.find(player => player.socketId === invitedPlayerSocketId);
             playerThatSentAnInvite.sentInvitations.push(invitedPlayer.username);
             invitedPlayer.receivedInvitations.push(playerThatSentAnInvite.username);
-            console.log('playerThatSentAnInvite',playerThatSentAnInvite);
-            console.log('invitedPlayer',invitedPlayer);
             io.to(invitedPlayerSocketId).emit('receiveRequest', invitedPlayer.receivedInvitations);
-            io.emit('sendingAllUsers', players);
-            // io.to(socket.id).emit('invitationSentSuccessfully', invitedPlayerSocketId);
-            let roomId = playerThatSentAnInvite.socketId + invitedPlayerSocketId;
+            io.to(socket.id).emit('invitationSentSuccessfully', playerThatSentAnInvite.sentInvitations);
+            let roomId = playerThatSentAnInvite.username + invitedPlayer.username;
             socket.join(roomId);
+            playerThatSentAnInvite.roomsJoined.push(roomId);
         });
         socket.on('invitationDenied', playerWhoWasDeniedSocketId => {
             const playerWhoDeniedInvitation = players.find(player => player.socketId === socket.id);
-            io.to(playerWhoWasDeniedSocketId).emit('denied', playerWhoDeniedInvitation);
+            const playerWhoWasDenied = players.find(player => player.socketId === playerWhoWasDeniedSocketId);
+            playerWhoDeniedInvitation.receivedInvitations = playerWhoDeniedInvitation.receivedInvitations.filter(receivedInvitation => receivedInvitation !== playerWhoWasDenied.username)
+            playerWhoWasDenied.sentInvitations = playerWhoWasDenied.sentInvitations.filter(invitedPlayer => invitedPlayer !== playerWhoDeniedInvitation.username)
+            io.to(playerWhoDeniedInvitation.socketId).emit('youDeniedInvitation', playerWhoDeniedInvitation.receivedInvitations);
+            io.to(playerWhoWasDenied.socketId).emit('yourInvitationWasDenied', playerWhoWasDenied.sentInvitations);
         });
         socket.on('invitationAccepted', async playerWhoWantsToPlay => {
             const playerWhoAcceptedInvite = players.find(player => player.socketId === socket.id);
             playerWhoAcceptedInvite.inBattle = true;
             playerWhoWantsToPlay = players.find(player => player.username === playerWhoWantsToPlay);
             playerWhoWantsToPlay.inBattle = true;
-            console.log('playerWhoWantsToPlay when the other accepted his request to play',playerWhoWantsToPlay);
-            io.to(playerWhoWantsToPlay.socketId).emit('yourInvitationWasAccepted', playerWhoAcceptedInvite);
-            let roomId = playerWhoWantsToPlay.socketId + playerWhoAcceptedInvite.socketId;
+            playerWhoAcceptedInvite.receivedInvitations = playerWhoAcceptedInvite.receivedInvitations.filter(receivedInvitation => receivedInvitation !== playerWhoWantsToPlay.username);
+            playerWhoWantsToPlay.sentInvitations = playerWhoWantsToPlay.sentInvitations.filter(sentInvitation => sentInvitation !== playerWhoAcceptedInvite.username);
+            io.to(playerWhoWantsToPlay.socketId).emit('yourInvitationWasAccepted', playerWhoWantsToPlay.sentInvitations);
+            io.to(socket.id).emit('you accepted the invitation', playerWhoAcceptedInvite.receivedInvitations);
+            let roomId = playerWhoWantsToPlay.username + playerWhoAcceptedInvite.username;
             socket.join(roomId);
-            let allPlayersInDb = await playersDb.find();
-            console.log('allPlayersInDb', allPlayersInDb);
             let player1= null;
             try {
                 player1 = await playersDb.findOne({username: playerWhoWantsToPlay.username}, {
@@ -75,13 +91,11 @@ module.exports = (server) => {
                     inventory: 0,
                     money: 0
                 });
-                console.log('player1 before adding additional keys inside try', player1);
             } catch (e) {
                 console.log('error finding player1', e)
             }
 
             player1 = {winPot: 0, hp: 100, ...player1._doc};
-            console.log('player1', player1);
             let player2 = await playersDb.findOne({username: playerWhoAcceptedInvite.username}, {
                 password: 0,
                 generatedItems: 0,
@@ -89,7 +103,6 @@ module.exports = (server) => {
                 money: 0
             });
             player2 = {winPot: 0, hp: 100, ...player2._doc};
-            console.log('player2', player2);
             const room = {
                 roomId: roomId,
                 players: [player1, player2],
@@ -102,25 +115,41 @@ module.exports = (server) => {
             io.to(roomId).emit('joinedRoom', room);
             io.emit('sendingAllUsers', players)
         });
+        socket.on('playerLeftInTheMiddleOfBattle', roomId => {
+            if(timer) clearInterval(timer);
+            const playerWhoLeft = players.find(player =>player.socketId === socket.id);
+            playerWhoLeft.inBattle = false;
+            const room = rooms.find(room => room.roomId === roomId);
+            room.players = room.players.filter(player => player.socketId !== socket.id);
+            room.gameOver = true;
+            let playerWhoWasAbandoned = room.players.find(player => player.username !== playerWhoLeft.username);
+            playerWhoWasAbandoned = players.find(player=>player.username === playerWhoWasAbandoned.username);
+            io.to(playerWhoWasAbandoned.socketId).emit('youWereLeftAlone', true);
+            io.emit('sendingAllUsers', players);
+        });
+        socket.on('leaveAfterBeingAbandoned', roomId => {
+            const secondPlayerWhoLeft = players.find(player => player.socketId === socket.id);
+            secondPlayerWhoLeft.inBattle = false;
+            const room = rooms.find(room => room.roomId === roomId);
+            rooms = rooms.filter(room=> room.roomId !== roomId);
+            io.emit('sendingAllUsers', players);
+        })
         socket.on('turn', roomId => {
             if(timer) clearInterval(timer);
-            console.log(roomId);
-            // console.log(rooms);
             let room = rooms.find(room => room.roomId === roomId);
-            console.log('room turn', room.turn);
             const playersTurn = room.players.find(player => player.username === room.turn);
             const playerToReceiveHit = room.players.find(player => player.username !== room.turn);
-            console.log('playersTurn', playersTurn.username);
-            console.log('playerToReceiveHit', playerToReceiveHit.username);
             room.timer = 20;
             timer = setInterval(() => {
                 room.timer -=1;
                 console.log(room.timer)
                 if(room.timer <=0) {
-                    room.gameOver = true;
-                    room.winner = playersTurn.username;
-                    console.log('room turn, players turn username, winner', room.turn, playersTurn.username, room.winner);
-                    if(timer) clearInterval(timer);
+                    if (room.turn === room.players[0].username) {
+                        room.turn = room.players[1].username;
+                    } else {
+                        room.turn = room.players[0].username;
+                    }
+                    room.timer = 20;
                 }
                 io.to(roomId).emit('timer', room);
             },1000)
@@ -136,8 +165,8 @@ module.exports = (server) => {
             if (randomNumberForCriticalChance <= totalDoubleDamageChance) randomDamage *= 2;
             // calculating total shield and dodge from the attack
             let totalShield = Math.round(randomDamage * playerToReceiveHit.equippedArmour.dodge / 100);
-            let armourDodgeChance = playerToReceiveHit.equippedArmour.effects.find(effect => effect.effect === 'Double Dodge');
-            let weaponDodgeChance = playerToReceiveHit.equippedWeapon.effects.find(effect => effect.effect === 'Double Dodge');
+            let armourDodgeChance = playerToReceiveHit.equippedArmour.effects.find(effect => effect.effect === 'Dodge Chance');
+            let weaponDodgeChance = playerToReceiveHit.equippedWeapon.effects.find(effect => effect.effect === 'Dodge Chance');
             let totalDodgeChance = 0;
             if (armourDodgeChance) totalDodgeChance += armourDodgeChance.chance;
             if (weaponDodgeChance) totalDodgeChance += weaponDodgeChance.chance;
@@ -146,8 +175,8 @@ module.exports = (server) => {
             if (randomNumberForDodgeChance <= totalDodgeChance) totalDamage = 0;
             playerToReceiveHit.hp -= totalDamage;
             //// steal hp points
-            let weaponLifeStealChance = playersTurn.equippedWeapon.effects.find(effect => effect.effect === 'Steal hit points');
-            let armourLifeStealChance = playersTurn.equippedArmour.effects.find(effect => effect.effect === 'Steal hit points');
+            let weaponLifeStealChance = playersTurn.equippedWeapon.effects.find(effect => effect.effect === 'Steal hp points');
+            let armourLifeStealChance = playersTurn.equippedArmour.effects.find(effect => effect.effect === 'Steal hp points');
             let totalLifeStealChance = 0;
             if (weaponLifeStealChance) totalLifeStealChance += weaponLifeStealChance.chance;
             if (armourLifeStealChance) totalLifeStealChance += armourLifeStealChance.chance;
@@ -167,17 +196,11 @@ module.exports = (server) => {
             } else {
                 room.turn = room.players[0].username;
             }
-            console.log(room);
             io.to(roomId).emit('roomInfo', room);
         });
         socket.on('usePotion', info => {
-            console.log(info);
-            console.log(info.roomId);
-            console.log(info.username);
             let room = rooms.find(room => room.roomId === info.roomId);
-            console.log(room);
             const playerUsingPotion = room.players.find(player => player.username === info.username);
-            console.log('playerUsingPotion', playerUsingPotion);
             playerUsingPotion.hp += playerUsingPotion.equippedPotion.restores;
             if (playerUsingPotion.hp > 100) playerUsingPotion.hp = 100;
             playerUsingPotion.equippedPotion = null;
@@ -186,39 +209,34 @@ module.exports = (server) => {
         socket.on('leaveBattle', async info => {
             const playerWhoLeftBattle = players.find(player => player.socketId === socket.id);
             playerWhoLeftBattle.inBattle = false;
-            console.log('leave battle room id',info.roomId);
             let room = rooms.find(room => room.roomId === info.roomId);
-            console.log('leave battle room',room);
             const winner = room.players.find(player => player.username === room.winner);
-            console.log('leave battle winner',winner);
             if(winner) {
                 const winnerDb = await playersDb.findOne({username: winner.username});
                 if(!winner.equippedPotion && winnerDb.equippedPotion) {
                     const updateWinner = await playersDb.findOneAndUpdate(
                         {username: winner.username},
-                        {$inc: {money: winner.winPot}, $set: {equippedPotion: null}, $pull: {inventory: winnerDb.equippedPotion}},
+                        {$inc: {money: winner.winPot, victories: 1}, $set: {equippedPotion: null}, $pull: {inventory: winnerDb.equippedPotion}},
                         {new: true})
                 } else {
                     const updateWinner = await playersDb.findOneAndUpdate(
                         {username: winner.username},
-                        {$inc: {money: winner.winPot}},
+                        {$inc: {money: winner.winPot, victories: 1}},
                         {new: true})
                 }
             }
             const looser = room.players.find(player => player.username !== room.winner);
-            console.log('leave battle looser',looser);
             if(looser) {
                 const looserDb = await playersDb.findOne({username: looser.username});
                 if(!looser.equippedPotion && looserDb.equippedPotion) {
                     const updateLooser = await playersDb.findOneAndUpdate(
                         {username: looser.username},
-                        {$set: {equippedPotion: null}, $pull: {inventory: looserDb.equippedPotion}},
+                        {$set: {equippedPotion: null}, $pull: {inventory: looserDb.equippedPotion}, $inc: {losses :1}},
                         {new: true})
                 }
             }
             io.emit('sendingAllUsers', players)
             room.players = room.players.filter(player => player.username !== info.username);
-            console.log('leave battle list of room players ',room.players);
             if(room.players.length === 0) rooms = rooms.filter(room => room.roomId !== info.roomId);
         })
     })
