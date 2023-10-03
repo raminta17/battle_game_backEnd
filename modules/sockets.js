@@ -4,6 +4,7 @@ const playersDb = require('../schemas/playerSchema');
 let players = [];
 let rooms = [];
 let timer = null;
+
 function randomNum(num) {
     return Math.floor(Math.random() * num);
 }
@@ -21,9 +22,10 @@ module.exports = (server) => {
         try {
             const data = await jwt.verify(token, process.env.JWT_SECRET);
             let existingPlayer = players.find(player => player.username === data.username);
-            if(existingPlayer) {
+            if (existingPlayer) {
                 io.to(existingPlayer.socketId).emit('logout', 'you need to log out');
                 existingPlayer.isOnline = true;
+                existingPlayer.inBattle = false,
                 existingPlayer.socketId = socket.id;
                 existingPlayer.roomsJoined.map(roomJoined => socket.join(roomJoined));
             } else {
@@ -43,13 +45,27 @@ module.exports = (server) => {
             console.log('verification error in sockets', err);
         }
 
-
+        socket.on('getAllUsersData', () => {
+            io.emit('sendingAllUsers', players);
+        })
         socket.on("disconnect", () => {
             console.log('user disconnected');
             let disconnectedPlayer = players.find(player => player.socketId === socket.id);
-            if(disconnectedPlayer) {
+            if (disconnectedPlayer) {
                 disconnectedPlayer.isOnline = false;
                 disconnectedPlayer.roomsJoined.map(roomJoined => socket.leave(roomJoined));
+                const findActiveBattle = rooms.map(room => {
+                    let player = room.players.find(player => player.username === disconnectedPlayer.username);
+                    if (player) return room;
+                })
+                if (timer) clearInterval(timer);
+                if (findActiveBattle[0]) {
+                    findActiveBattle[0].players = findActiveBattle[0].players.filter(player => player.socketId !== socket.id);
+                    let playerWhoWasAbandoned = findActiveBattle[0].players.find(player => player.username !== disconnectedPlayer.username);
+                    playerWhoWasAbandoned = players.find(player => player.username === playerWhoWasAbandoned.username);
+                    io.to(playerWhoWasAbandoned.socketId).emit('youWereLeftAlone', true);
+                }
+
             }
             io.emit('sendingAllUsers', players)
         });
@@ -62,7 +78,8 @@ module.exports = (server) => {
             io.to(socket.id).emit('invitationSentSuccessfully', playerThatSentAnInvite.sentInvitations);
             let roomId = playerThatSentAnInvite.username + invitedPlayer.username;
             socket.join(roomId);
-            playerThatSentAnInvite.roomsJoined.push(roomId);
+            const findRoom = playerThatSentAnInvite.roomsJoined.includes(roomId);
+            if(!findRoom) playerThatSentAnInvite.roomsJoined.push(roomId);
         });
         socket.on('invitationDenied', playerWhoWasDeniedSocketId => {
             const playerWhoDeniedInvitation = players.find(player => player.socketId === socket.id);
@@ -83,9 +100,10 @@ module.exports = (server) => {
             io.to(socket.id).emit('you accepted the invitation', playerWhoAcceptedInvite.receivedInvitations);
             let roomId = playerWhoWantsToPlay.username + playerWhoAcceptedInvite.username;
             socket.join(roomId);
-            let player1= null;
+            let player1 = null;
             try {
                 player1 = await playersDb.findOne({username: playerWhoWantsToPlay.username}, {
+                    _id: 0,
                     password: 0,
                     generatedItems: 0,
                     inventory: 0,
@@ -97,10 +115,13 @@ module.exports = (server) => {
 
             player1 = {winPot: 0, hp: 100, ...player1._doc};
             let player2 = await playersDb.findOne({username: playerWhoAcceptedInvite.username}, {
+                _id: 0,
                 password: 0,
                 generatedItems: 0,
                 inventory: 0,
-                money: 0
+                money: 0,
+                victories: 0,
+                losses: 0
             });
             player2 = {winPot: 0, hp: 100, ...player2._doc};
             const room = {
@@ -116,14 +137,14 @@ module.exports = (server) => {
             io.emit('sendingAllUsers', players)
         });
         socket.on('playerLeftInTheMiddleOfBattle', roomId => {
-            if(timer) clearInterval(timer);
-            const playerWhoLeft = players.find(player =>player.socketId === socket.id);
+            if (timer) clearInterval(timer);
+            const playerWhoLeft = players.find(player => player.socketId === socket.id);
             playerWhoLeft.inBattle = false;
             const room = rooms.find(room => room.roomId === roomId);
             room.players = room.players.filter(player => player.socketId !== socket.id);
             room.gameOver = true;
             let playerWhoWasAbandoned = room.players.find(player => player.username !== playerWhoLeft.username);
-            playerWhoWasAbandoned = players.find(player=>player.username === playerWhoWasAbandoned.username);
+            playerWhoWasAbandoned = players.find(player => player.username === playerWhoWasAbandoned.username);
             io.to(playerWhoWasAbandoned.socketId).emit('youWereLeftAlone', true);
             io.emit('sendingAllUsers', players);
         });
@@ -131,19 +152,19 @@ module.exports = (server) => {
             const secondPlayerWhoLeft = players.find(player => player.socketId === socket.id);
             secondPlayerWhoLeft.inBattle = false;
             const room = rooms.find(room => room.roomId === roomId);
-            rooms = rooms.filter(room=> room.roomId !== roomId);
+            rooms = rooms.filter(room => room.roomId !== roomId);
             io.emit('sendingAllUsers', players);
         })
         socket.on('turn', roomId => {
-            if(timer) clearInterval(timer);
+            if (timer) clearInterval(timer);
             let room = rooms.find(room => room.roomId === roomId);
             const playersTurn = room.players.find(player => player.username === room.turn);
             const playerToReceiveHit = room.players.find(player => player.username !== room.turn);
             room.timer = 20;
             timer = setInterval(() => {
-                room.timer -=1;
+                room.timer -= 1;
                 console.log(room.timer)
-                if(room.timer <=0) {
+                if (room.timer <= 0) {
                     if (room.turn === room.players[0].username) {
                         room.turn = room.players[1].username;
                     } else {
@@ -152,7 +173,7 @@ module.exports = (server) => {
                     room.timer = 20;
                 }
                 io.to(roomId).emit('timer', room);
-            },1000)
+            }, 1000)
 
             //// calculating total damage made
             let randomDamage = randomNum(playersTurn.equippedWeapon.damage + 1);
@@ -189,7 +210,7 @@ module.exports = (server) => {
             if (playerToReceiveHit.hp <= 0) {
                 room.gameOver = true;
                 room.winner = playersTurn.username
-                if(timer) clearInterval(timer);
+                if (timer) clearInterval(timer);
             }
             if (room.turn === room.players[0].username) {
                 room.turn = room.players[1].username;
@@ -211,12 +232,16 @@ module.exports = (server) => {
             playerWhoLeftBattle.inBattle = false;
             let room = rooms.find(room => room.roomId === info.roomId);
             const winner = room.players.find(player => player.username === room.winner);
-            if(winner) {
+            if (winner) {
                 const winnerDb = await playersDb.findOne({username: winner.username});
-                if(!winner.equippedPotion && winnerDb.equippedPotion) {
+                if (!winner.equippedPotion && winnerDb.equippedPotion) {
                     const updateWinner = await playersDb.findOneAndUpdate(
                         {username: winner.username},
-                        {$inc: {money: winner.winPot, victories: 1}, $set: {equippedPotion: null}, $pull: {inventory: winnerDb.equippedPotion}},
+                        {
+                            $inc: {money: winner.winPot, victories: 1},
+                            $set: {equippedPotion: null},
+                            $pull: {inventory: winnerDb.equippedPotion}
+                        },
                         {new: true})
                 } else {
                     const updateWinner = await playersDb.findOneAndUpdate(
@@ -226,18 +251,18 @@ module.exports = (server) => {
                 }
             }
             const looser = room.players.find(player => player.username !== room.winner);
-            if(looser) {
+            if (looser) {
                 const looserDb = await playersDb.findOne({username: looser.username});
-                if(!looser.equippedPotion && looserDb.equippedPotion) {
+                if (!looser.equippedPotion && looserDb.equippedPotion) {
                     const updateLooser = await playersDb.findOneAndUpdate(
                         {username: looser.username},
-                        {$set: {equippedPotion: null}, $pull: {inventory: looserDb.equippedPotion}, $inc: {losses :1}},
+                        {$set: {equippedPotion: null}, $pull: {inventory: looserDb.equippedPotion}, $inc: {losses: 1}},
                         {new: true})
                 }
             }
             io.emit('sendingAllUsers', players)
             room.players = room.players.filter(player => player.username !== info.username);
-            if(room.players.length === 0) rooms = rooms.filter(room => room.roomId !== info.roomId);
+            if (room.players.length === 0) rooms = rooms.filter(room => room.roomId !== info.roomId);
         })
     })
 

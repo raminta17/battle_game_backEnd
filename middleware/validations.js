@@ -7,15 +7,12 @@ const jwt = require('jsonwebtoken');
 
 module.exports = {
     validateRegister: async (req,res,next) => {
-        console.log(req.body);
         if(!req.body.username) return resSend(res, true, null, 'Username cannot be empty');
         if(!req.body.pass1) return resSend(res, true, null, 'Password cannot be empty');
         if(req.body.pass1 !== req.body.pass2) return resSend(res, true, null, 'Passwords should match.');
-        if(!req.body.monster) return resSend(res, true, null, 'Please select your fighter.');
+        if(!req.body.monster && req.body.monster!==0) return resSend(res, true, null, 'Please select your fighter.');
         const searchForUsername = await playersDb.findOne({username: req.body.username});
         if(searchForUsername) return resSend(res, true, null, 'Username is taken.');
-        // const searchForMonster = await playersDb.findOne({monster: req.body.monster});
-        // if(searchForMonster) return resSend(res, true, null, 'Mo');
         next();
     },
     validateLogin: async (req,res, next) => {
